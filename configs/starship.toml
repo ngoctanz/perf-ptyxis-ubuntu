@@ -1,0 +1,154 @@
+format = """
+[](#E8AEB7)\
+$os\
+$username\
+[](bg:#B9E3DE fg:#E8AEB7)\
+$directory\
+[](fg:#B9E3DE bg:#A0CED9)\
+$git_branch\
+$git_status\
+[](fg:#A0CED9 bg:#ADF7B6)\
+$c\
+$cpp\
+$elixir\
+$elm\
+$golang\
+$gradle\
+$haskell\
+$java\
+$julia\
+$maven\
+$nodejs\
+$bun\
+$nim\
+$rust\
+$scala\
+[](fg:#ADF7B6 bg:#FFEE93)\
+$docker_context\
+[](fg:#FFEE93 bg:#FFC6FF)\
+$time\
+[ ](fg:#FFC6FF)\
+"""
+
+[username]
+show_always = true
+style_user = "bg:#E8AEB7 fg:#333333 bold"
+style_root = "bg:#E8AEB7 fg:#ff5555 bold"
+format = '[$user ]($style)'
+disabled = false
+
+[os]
+disabled = false
+style = "bg:#E8AEB7 fg:#333333 bold"
+format = "[$symbol]($style)"
+
+[os.symbols]
+Fedora = " "
+Ubuntu = " "
+Linux = "🐧 "
+Unknown = "🐧 "
+
+[directory]
+style = "bg:#B9E3DE fg:#333333 bold"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+
+[c]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[cpp]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[docker_context]
+symbol = " "
+style = "bg:#FFEE93 fg:#333333"
+format = '[ $symbol $context ]($style)'
+
+[elixir]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[elm]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[git_branch]
+symbol = " "
+style = "bg:#A0CED9 fg:#333333 bold"
+format = '[ $symbol$branch ]($style)'
+
+[git_status]
+style = "bg:#A0CED9 fg:#333333"
+format = '[$all_status$ahead_behind ]($style)'
+
+[golang]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[gradle]
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[haskell]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[java]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[julia]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[maven]
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[nodejs]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[bun]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[nim]
+symbol = "󰆥 "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[rust]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[scala]
+symbol = " "
+style = "bg:#ADF7B6 fg:#333333"
+format = '[ $symbol($version) ]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:#FFC6FF fg:#333333 bold"
+format = '[  $time ]($style)'

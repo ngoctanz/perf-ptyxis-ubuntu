@@ -1,0 +1,72 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": {
+    "source": "assets/bg_terminal.png",
+    "type": "chafa",
+    "width": 45,
+    "height": 13,
+    "padding": {
+      "right": 4
+    }
+  },
+  "display": {
+    "separator": "   ", 
+    "color": "white"
+  },
+  "modules": [
+    "title",
+    {
+      "type": "custom",
+      "format": "╭────────────────────────────────────────╮"
+    },
+    {
+      "type": "os",
+      "key": "  󰣇  os  ",
+      "keyColor": "blue",
+      "format": "{2}" 
+    },
+    {
+      "type": "kernel",
+      "key": "  󰒋  sys ",
+      "keyColor": "blue",
+      "format": "{2}"
+    },
+    {
+      "type": "wm",
+      "key": "    wm  ",
+      "keyColor": "cyan"
+    },
+    {
+      "type": "shell",
+      "key": "  󰞷  sh  ",
+      "keyColor": "cyan",
+      "format": "{1}" 
+    },
+    {
+      "type": "terminal",
+      "key": "    trm ",
+      "keyColor": "green" 
+    },
+    {
+      "type": "uptime",
+      "key": "  󱎫  up  ",
+      "keyColor": "green",
+      "format": "{1} hour, {2} mins"
+    },
+    {
+      "type": "memory",
+      "key": "    ram ",
+      "keyColor": "yellow",
+      "format": "{1} / {2}"
+    },
+    {
+      "type": "custom",
+      "format": "╰────────────────────────────────────────╯"
+    },
+    "break",
+    {
+      "type": "colors",
+      "symbol": "block"
+    }
+  ]
+}
