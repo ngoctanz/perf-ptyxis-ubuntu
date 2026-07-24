@@ -2,6 +2,8 @@
 
 ![Fastfetch terminal preview](assets/terminal_fastfetch.png)
 
+![Full desktop preview](assets/fullscrenn.png)
+
 An interactive Ubuntu setup script for Zsh, Oh My Zsh, Starship, Fastfetch,
 JetBrainsMono Nerd Font, Kitty, Ptyxis opacity, Fcitx5, Flatpak, and optional
 system cleanup.
