@@ -1,16 +1,23 @@
-# Enhanced Ubuntu Terminal
+# Enhanced Linux Terminal
 
-Turn a fresh Ubuntu terminal into a practical, readable, and customizable
-developer environment without configuring every tool by hand.
+Turn a fresh Ubuntu/Debian or Fedora/RHEL-family terminal into a practical,
+readable, and customizable developer environment without configuring every tool
+by hand.
 
-![Full Ubuntu desktop preview](assets/fullscrenn.png)
+![Full desktop preview](assets/fullscrenn.png)
 
 ![Fastfetch and Starship preview](assets/terminal_fastfetch.png)
 
 ## What this project does
 
-`install.sh` is an interactive Ubuntu setup script. You choose what to install;
-everything is optional and every wizard question defaults to **No**.
+`install.sh` is an interactive setup script with two package backends:
+
+1. Ubuntu/Debian (`apt` and `dpkg`)
+2. Fedora/RHEL family (`dnf` and RPM)
+
+The script detects the current system and uses it as the wizard default. You can
+still select the family in the wizard or pass `--distro ubuntu` or
+`--distro fedora`. Everything else is optional and defaults to **No**.
 
 It can configure:
 
@@ -26,22 +33,15 @@ It can configure:
 | **Fcitx5 + Unikey** | Provide Vietnamese input support |
 | **Flatpak + Flathub** | Optionally install Flatpak applications |
 
-The script also exposes optional system update, Snap removal, GNOME Software,
-and cleanup actions. These are not enabled by default.
+The script also exposes optional system update, GNOME Software, and cleanup
+actions. Snap removal is offered only on Ubuntu and is never run on Fedora/RHEL.
+These actions are not enabled by default.
 
-## What is Ubuntu's default terminal?
+## Terminal support
 
-There is no single answer for every Ubuntu release.
-
-- Ubuntu Desktop 25.10 introduced **Ptyxis** as part of its modernized default
-  application set. See the
-  [Ubuntu 25.10 desktop roadmap](https://discourse.ubuntu.com/t/ubuntu-desktop-25-10-the-questing-quokka-roadmap/61159).
-- Ubuntu releases may still have GNOME Terminal, GNOME Console, Kitty, or
-  another emulator installed.
-- On Ubuntu 25.04 and later, the default is the terminal opened by
-  `Ctrl` + `Alt` + `T` and is selected through Ubuntu's XDG terminal mechanism.
-  See the official
-  [Ubuntu default-terminal guide](https://ubuntu.com/desktop/docs/en/26.04/how-to/change-the-default-terminal/).
+The script works whether Ptyxis, GNOME Terminal, GNOME Console, Kitty, or another
+emulator is your default. Only the Ptyxis opacity option specifically requires
+Ptyxis and its GSettings profile.
 
 This project does **not** replace the default terminal automatically:
 
@@ -51,7 +51,7 @@ This project does **not** replace the default terminal automatically:
 
 ## Why customize it?
 
-Ubuntu's default terminal is already stable and sufficient for normal shell
+The default terminal is already stable and sufficient for normal shell
 work. This setup is useful when you want:
 
 - a prompt that shows the current directory, Git branch, language runtime, and
@@ -60,7 +60,7 @@ work. This setup is useful when you want:
 - consistent Nerd Font icons;
 - a quick system overview when opening Zsh;
 - a transparent Ptyxis profile or Kitty as an alternative emulator;
-- the same setup across multiple Ubuntu machines.
+- the same setup across Ubuntu/Debian and Fedora/RHEL-family machines.
 
 This is a convenience setup, not a performance requirement. If the stock
 terminal already fits your workflow, keep it.
@@ -70,7 +70,7 @@ terminal already fits your workflow, keep it.
 ### Advantages
 
 - Interactive and opt-in: skip anything you do not need.
-- Reuses Ubuntu packages where available.
+- Reuses native DEB or RPM packages where available.
 - Skips packages that are already installed.
 - Includes matching Starship, Fastfetch, font, and image configuration.
 - Supports `--dry-run` before changing the machine.
@@ -81,14 +81,15 @@ terminal already fits your workflow, keep it.
 - More shell startup output and slightly more startup work.
 - Nerd Font symbols may render as squares until the terminal font is selected.
 - Oh My Zsh and Starship installers are downloaded from their upstream sites.
-- Package availability varies between Ubuntu versions.
-- Removing Snap, running a full upgrade, autoremove, or cache cleanup cannot be
+- Package availability varies between distro releases and enabled repositories.
+- Removing Snap, running a system upgrade, autoremove, or cache cleanup cannot be
   fully reversed.
 - Kitty is installed as an alternative; it is not automatically made default.
 
 ## Requirements
 
-- Ubuntu or an Ubuntu-based system with `apt`
+- Ubuntu/Debian with `apt`, or Fedora/RHEL family with `dnf`
+- A traditional package-managed installation (Fedora Atomic variants are not supported)
 - A normal user account with `sudo` access
 - An internet connection
 - Bash 4 or later
@@ -100,14 +101,21 @@ only for system operations.
 ## Quick start
 
 ```bash
-git clone https://github.com/ngoctanz/perf-ptyxis-ubuntu.git
-cd perf-ptyxis-ubuntu
+git clone https://github.com/ngoctanz/perf-ptyxis-ubuntu.git perf-linux-terminal
+cd perf-linux-terminal
 chmod +x install.sh
 ./install.sh
 ```
 
 Running without options opens the wizard. Review all selected actions before
 the final confirmation.
+
+For a non-interactive command, select the package family explicitly when needed:
+
+```bash
+./install.sh --distro ubuntu --dry-run --desktop-stack
+./install.sh --distro fedora --dry-run --desktop-stack
+```
 
 ## Preview first
 
@@ -193,24 +201,33 @@ The installer copies the image into the active XDG configuration directory and
 writes the resulting path into `config.jsonc`. The top-level `assets/`
 directory contains README screenshots only.
 
-## Make Kitty the default terminal
+Fastfetch uses Chafa to render the image. Every non-Ubuntu system, including
+Fedora/RHEL and Debian derivatives, installs only `fastfetch` and `chafa`.
+ImageMagick is retained only when `/etc/os-release` identifies Ubuntu itself.
 
-Ubuntu 25.04 and later can use the XDG terminal list:
+The Fedora/RHEL wizard does not offer Snap removal because Fedora GNOME does not
+use Snap by default. Passing `--remove-snap` with the Fedora backend is also a
+safe no-op.
 
-```bash
-mkdir -p "$HOME/.config"
-printf '%s\n' 'kitty.desktop' > "$HOME/.config/ubuntu-xdg-terminals.list"
-```
+## Make Kitty the preferred terminal
 
-To use Ptyxis instead:
+The script installs Kitty but does not replace the desktop's preferred terminal.
+Default-terminal handling varies by distro and desktop release, so change it
+through your desktop settings or keyboard-shortcut configuration.
 
-```bash
-printf '%s\n' 'org.gnome.Ptyxis.desktop:new-window' \
-  > "$HOME/.config/ubuntu-xdg-terminals.list"
-```
+## GRUB paths
 
-This file is specific to the standard Ubuntu GNOME desktop. Other desktop
-environments can use a different configuration mechanism.
+This project does not currently edit GRUB. If a future option needs to do so, it
+must use the correct command for the selected distro family:
+
+| Family | Editable defaults | Generated configuration | Refresh command |
+| --- | --- | --- | --- |
+| Ubuntu/Debian | `/etc/default/grub` | `/boot/grub/grub.cfg` | `sudo update-grub` |
+| Fedora/RHEL | `/etc/default/grub` | `/boot/grub2/grub.cfg` | `sudo grub2-mkconfig -o /boot/grub2/grub.cfg` |
+
+On Fedora, prefer `grubby` for persistent kernel-argument changes. Do not write
+directly to the small UEFI forwarding file under `/boot/efi/EFI/fedora/` on
+current installations.
 
 ## Rollback
 
@@ -226,9 +243,9 @@ Then run it:
 ./install.sh --uninstall
 ```
 
-Rollback restores recorded Fastfetch, Starship, Zsh, Fcitx5 autostart, previous
-login shell, and Ptyxis settings. It removes files and packages recorded as
-newly installed by this script.
+Rollback restores recorded Fastfetch, Starship, Zsh, previous login shell, and
+Ptyxis settings. It removes files and RPM packages recorded as newly installed
+by this script, including the Fcitx5 autostart package when applicable.
 
 > [!CAUTION]
 > Run uninstall with the same `XDG_CONFIG_HOME` value used during installation.
@@ -238,9 +255,9 @@ newly installed by this script.
 
 The following actions cannot be reliably reversed:
 
-- a system update or full upgrade;
+- a system update or upgrade;
 - deleted Snap applications and Snap data;
-- `apt autoremove`;
+- `apt autoremove` or `dnf autoremove`;
 - package and journal cache cleanup;
 - Flatpak unused-runtime cleanup.
 
@@ -277,15 +294,25 @@ active desktop session. Open Ptyxis once to create a profile, then retry:
 ./install.sh --ptyxis-opacity 0.75
 ```
 
+### Fcitx5 starts but Unikey is not available
+
+Log out and back in after installation, then add Unikey to the active input
+methods. On Fedora use `fcitx5-configtool`; the Fedora branch installs
+`fcitx5-autostart`. The Ubuntu branch uses `im-config`.
+
 ### A package is reported as unavailable
 
-Refresh APT metadata and retry:
+Refresh package metadata and retry:
 
 ```bash
+# Ubuntu/Debian
 sudo apt update
+
+# Fedora/RHEL
+sudo dnf makecache --refresh
 ```
 
-Some packages are not available on every supported Ubuntu release.
+Some packages are not available on every distro release or enabled repository.
 
 ## Project layout
 
@@ -315,7 +342,7 @@ Never run shell installers from forks or modified copies you do not trust.
 
 Bug reports and focused pull requests are welcome. Include:
 
-- Ubuntu version;
+- distro and version;
 - desktop environment;
 - the exact command used;
 - the relevant `enhanced-terminal-*.log` output;

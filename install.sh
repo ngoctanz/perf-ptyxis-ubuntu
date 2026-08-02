@@ -9,6 +9,10 @@ AUTO_YES=false
 DRY_RUN=false
 INTERACTIVE=$([[ $# -eq 0 ]] && printf true || printf false)
 UNINSTALL=false
+DISTRO_FAMILY=""
+DETECTED_DISTRO_FAMILY=""
+OS_PRETTY_NAME="unknown"
+OS_ID="unknown"
 
 DO_UPDATE=false
 DO_REMOVE_SNAP=false
@@ -41,8 +45,22 @@ warn()    { printf '%s[WARN]%s %s\n' "$YELLOW" "$RESET" "$*"; }
 die()     { printf '%s[FAIL]%s %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
 section() { printf '\n%s== %s ==%s\n' "$BOLD" "$*" "$RESET"; }
 has()     { command -v "$1" >/dev/null 2>&1; }
-pkg_available() { apt-cache show "$1" >/dev/null 2>&1; }
-pkg_installed() { dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+
+pkg_available() {
+  case "$DISTRO_FAMILY" in
+    ubuntu) apt-cache show "$1" >/dev/null 2>&1 ;;
+    fedora) dnf -q list --available "$1" >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
+pkg_installed() {
+  case "$DISTRO_FAMILY" in
+    ubuntu) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
+    fedora) rpm -q "$1" >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
 
 run() {
   printf '+ '; printf '%q ' "$@"; printf '\n'
@@ -78,7 +96,10 @@ install_packages() {
     fi
   done
   ((${#available[@]})) || return 0
-  run sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${available[@]}"
+  case "$DISTRO_FAMILY" in
+    ubuntu) run sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${available[@]}" ;;
+    fedora) run sudo dnf install -y "${available[@]}" ;;
+  esac
   for package in "${new[@]}"; do record packages "$package"; done
 }
 
@@ -128,11 +149,12 @@ No options opens the interactive wizard. Every wizard choice defaults to No.
 
 General:
   --interactive              Open the interactive wizard
+  --distro FAMILY            Select ubuntu or fedora package family
   --yes, -y                  Skip the final confirmation
   --dry-run                  Print commands without changing the system
   --uninstall                Roll back changes recorded by this script
-  --update                   Update and full-upgrade Ubuntu
-  --remove-snap              Remove and block Snap (not fully reversible)
+  --update                   Refresh metadata and upgrade the system
+  --remove-snap              Ubuntu only: remove and block Snap
   --install-flatpak          Install Flatpak and add Flathub
   --install-gnome-software   Install GNOME Software and plugins
   --install-flatpak-apps     Install the configured Flatpak applications
@@ -159,10 +181,46 @@ valid_opacity() {
     awk -v value="$1" 'BEGIN { exit !(value >= 0.20 && value <= 1.00) }'
 }
 
+detect_distro_family() {
+  local id id_like
+  [[ -r /etc/os-release ]] || return 0
+  source /etc/os-release
+  id="${ID:-}"
+  id_like="${ID_LIKE:-}"
+  id="${id,,}"
+  id_like=" ${id_like,,} "
+  OS_ID="$id"
+  OS_PRETTY_NAME="${PRETTY_NAME:-$id}"
+  case "$id" in
+    ubuntu|debian|linuxmint|pop) DETECTED_DISTRO_FAMILY=ubuntu ;;
+    fedora|rhel|centos|rocky|almalinux) DETECTED_DISTRO_FAMILY=fedora ;;
+    *)
+      if [[ "$id_like" == *" debian "* || "$id_like" == *" ubuntu "* ]]; then
+        DETECTED_DISTRO_FAMILY=ubuntu
+      elif [[ "$id_like" == *" fedora "* || "$id_like" == *" rhel "* || "$id_like" == *" centos "* ]]; then
+        DETECTED_DISTRO_FAMILY=fedora
+      fi
+      ;;
+  esac
+  [[ -n "$DISTRO_FAMILY" ]] || DISTRO_FAMILY="$DETECTED_DISTRO_FAMILY"
+}
+
 wizard() {
   section "Interactive setup"
+  local distro_choice default_distro_choice
+  [[ "$DISTRO_FAMILY" == fedora ]] && default_distro_choice=2 || default_distro_choice=1
+  printf 'Target distro family:\n  1) Ubuntu/Debian (APT)\n  2) Fedora/RHEL (DNF)\n'
+  read -r -p "Choose [$default_distro_choice]: " distro_choice
+  case "${distro_choice:-$default_distro_choice}" in
+    1) DISTRO_FAMILY=ubuntu ;;
+    2) DISTRO_FAMILY=fedora ;;
+    *) die "Invalid distro choice: $distro_choice" ;;
+  esac
+
   ask "Update the system?" && DO_UPDATE=true
-  ask "Remove Snap? This cannot be fully rolled back" && DO_REMOVE_SNAP=true
+  if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+    ask "Remove Snap? This cannot be fully rolled back" && DO_REMOVE_SNAP=true
+  fi
   ask "Install Flatpak and Flathub?" && DO_FLATPAK=true
   ask "Install GNOME Software?" && DO_GNOME_SOFTWARE=true
   ask "Install Firefox and Thunderbird from Flathub?" && DO_FLATPAK_APPS=true
@@ -198,6 +256,15 @@ wizard() {
 while (($#)); do
   case "$1" in
     --interactive) INTERACTIVE=true ;;
+    --distro)
+      shift
+      (($#)) || die "--distro requires ubuntu or fedora."
+      case "${1,,}" in
+        ubuntu|debian) DISTRO_FAMILY=ubuntu ;;
+        fedora|rhel|redhat) DISTRO_FAMILY=fedora ;;
+        *) die "Unsupported distro family: $1 (use ubuntu or fedora)." ;;
+      esac
+      ;;
     --yes|-y) AUTO_YES=true ;;
     --dry-run) DRY_RUN=true ;;
     --uninstall) UNINSTALL=true ;;
@@ -239,23 +306,46 @@ done
 preflight() {
   section "System check"
   [[ "$EUID" -ne 0 ]] || die "Do not run the whole script with sudo."
-  source /etc/os-release
-  [[ "${ID:-}" == ubuntu ]] || warn "Designed for Ubuntu; detected ${PRETTY_NAME:-unknown}."
-  has apt-get || die "apt-get is required."
+  [[ -n "$DISTRO_FAMILY" ]] || die "Could not detect a supported distro. Use --distro ubuntu or --distro fedora."
+  if [[ -n "$DETECTED_DISTRO_FAMILY" && "$DISTRO_FAMILY" != "$DETECTED_DISTRO_FAMILY" ]]; then
+    die "Selected $DISTRO_FAMILY package family, but detected $OS_PRETTY_NAME ($DETECTED_DISTRO_FAMILY)."
+  fi
+  case "$DISTRO_FAMILY" in
+    ubuntu)
+      has apt-get || die "apt-get is required for the Ubuntu/Debian package family."
+      has apt-cache || die "apt-cache is required for the Ubuntu/Debian package family."
+      has dpkg-query || die "dpkg-query is required for the Ubuntu/Debian package family."
+      ;;
+    fedora)
+      [[ ! -e /run/ostree-booted ]] || die "Fedora Atomic desktops require rpm-ostree and are not supported."
+      has dnf || die "dnf is required for the Fedora/RHEL package family."
+      has rpm || die "rpm is required for the Fedora/RHEL package family."
+      ;;
+  esac
   run sudo -v
+  ok "Package family: $DISTRO_FAMILY ($OS_PRETTY_NAME)"
   ok "Log: $LOG_FILE"
 }
 
 update_system() {
   [[ "$DO_UPDATE" == true ]] || return 0
   section "Update system"
-  run sudo apt-get update
-  run sudo env DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y
+  case "$DISTRO_FAMILY" in
+    ubuntu)
+      run sudo apt-get update
+      run sudo env DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y
+      ;;
+    fedora) run sudo dnf upgrade --refresh -y ;;
+  esac
   install_packages curl git unzip ca-certificates fontconfig
 }
 
 remove_snap() {
   [[ "$DO_REMOVE_SNAP" == true ]] || return 0
+  if [[ "$DISTRO_FAMILY" != ubuntu ]]; then
+    info "Snap removal is Ubuntu-only; skipping on $OS_PRETTY_NAME."
+    return 0
+  fi
   section "Remove Snap"
   warn "Removed snaps and their data cannot be restored by --uninstall."
   if has snap; then
@@ -265,8 +355,10 @@ remove_snap() {
       [[ -n "$snap_name" ]] && run sudo snap remove --purge "$snap_name" || true
     done
   fi
-  pkg_installed snapd && run sudo systemctl disable --now snapd.socket snapd.service snapd.seeded.service || true
-  pkg_installed snapd && run sudo apt-get purge -y snapd
+  if pkg_installed snapd; then
+    run sudo systemctl disable --now snapd.socket snapd.service snapd.seeded.service || true
+    run sudo apt-get purge -y snapd
+  fi
   run sudo rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd
   run rm -rf "$HOME/snap"
   backup_once nosnap.pref /etc/apt/preferences.d/nosnap.pref
@@ -297,8 +389,13 @@ install_flatpak() {
 install_gnome_software() {
   [[ "$DO_GNOME_SOFTWARE" == true ]] || return 0
   section "GNOME Software"
-  install_packages gnome-software gnome-software-plugin-flatpak gnome-software-plugin-fwupd fwupd
-  pkg_available gnome-software-plugin-deb && install_packages gnome-software-plugin-deb
+  if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+    install_packages gnome-software gnome-software-plugin-flatpak \
+      gnome-software-plugin-fwupd fwupd
+    pkg_available gnome-software-plugin-deb && install_packages gnome-software-plugin-deb
+  else
+    install_packages gnome-software fwupd
+  fi
 }
 
 install_flatpak_apps() {
@@ -321,6 +418,7 @@ install_flatpak_apps() {
 install_nerd_font() {
   [[ "$DO_NERD_FONT" == true ]] || return 0
   section "JetBrainsMono Nerd Font"
+  install_packages curl unzip fontconfig
   local font_dir="$HOME/.local/share/fonts/JetBrainsMonoNerdFont" tmp
   if find "$font_dir" -type f -iname '*NerdFont*' -print -quit 2>/dev/null | grep -q .; then
     info "JetBrainsMono Nerd Font is already installed; skipping."
@@ -338,7 +436,11 @@ install_nerd_font() {
 install_fastfetch() {
   [[ "$DO_FASTFETCH" == true ]] || return 0
   section "Fastfetch"
-  install_packages fastfetch chafa imagemagick
+  if [[ "$OS_ID" == ubuntu ]]; then
+    install_packages fastfetch chafa imagemagick
+  else
+    install_packages fastfetch chafa
+  fi
   [[ -f "$FASTFETCH_IMAGE" ]] || die "Fastfetch image not found: $FASTFETCH_IMAGE"
 
   local target="${XDG_CONFIG_HOME:-$HOME/.config}/fastfetch"
@@ -455,19 +557,28 @@ install_fcitx5() {
   [[ "$DO_FCITX5" == true || "$DO_REMOVE_IBUS_UNIKEY" == true ]] || return 0
   section "Fcitx5"
   if [[ "$DO_FCITX5" == true ]]; then
-    install_packages fcitx5 fcitx5-unikey fcitx5-config-qt \
-      fcitx5-frontend-gtk3 fcitx5-frontend-gtk4 fcitx5-frontend-qt5 \
-      fcitx5-frontend-qt6 im-config
-    has im-config && run im-config -n fcitx5
-    local autostart="$HOME/.config/autostart/org.fcitx.Fcitx5.desktop"
-    backup_once fcitx5-autostart "$autostart"
-    if [[ -f /usr/share/applications/org.fcitx.Fcitx5.desktop ]]; then
-      run mkdir -p "$(dirname "$autostart")"
-      run cp /usr/share/applications/org.fcitx.Fcitx5.desktop "$autostart"
+    if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+      install_packages fcitx5 fcitx5-unikey fcitx5-config-qt \
+        fcitx5-frontend-gtk3 fcitx5-frontend-gtk4 fcitx5-frontend-qt5 \
+        fcitx5-frontend-qt6 im-config
+      has im-config && run im-config -n fcitx5
+      local autostart="$HOME/.config/autostart/org.fcitx.Fcitx5.desktop"
+      backup_once fcitx5-autostart "$autostart"
+      if [[ -f /usr/share/applications/org.fcitx.Fcitx5.desktop ]]; then
+        run mkdir -p "$(dirname "$autostart")"
+        run cp /usr/share/applications/org.fcitx.Fcitx5.desktop "$autostart"
+      fi
+    else
+      install_packages fcitx5 fcitx5-autostart fcitx5-unikey fcitx5-configtool \
+        fcitx5-gtk fcitx5-qt
     fi
   fi
   if [[ "$DO_REMOVE_IBUS_UNIKEY" == true ]] && pkg_installed ibus-unikey; then
-    run sudo apt-get purge -y ibus-unikey
+    if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+      run sudo apt-get purge -y ibus-unikey
+    else
+      run sudo dnf remove -y ibus-unikey
+    fi
     record removed-packages ibus-unikey
   fi
 }
@@ -476,9 +587,14 @@ clean_system() {
   [[ "$DO_CLEAN" == true ]] || return 0
   section "Clean system"
   warn "Cache cleanup and autoremove cannot be rolled back."
-  run sudo apt-get autoremove --purge -y
-  run sudo apt-get autoclean
-  run sudo apt-get clean
+  if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+    run sudo apt-get autoremove --purge -y
+    run sudo apt-get autoclean
+    run sudo apt-get clean
+  else
+    run sudo dnf autoremove -y
+    run sudo dnf clean all
+  fi
   has flatpak && run flatpak uninstall --unused -y
   run sudo journalctl --vacuum-time=7d
 }
@@ -492,10 +608,12 @@ uninstall_all() {
   restore_one starship.toml "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml"
   restore_one zshrc "$HOME/.zshrc"
   restore_one fcitx5-autostart "$HOME/.config/autostart/org.fcitx.Fcitx5.desktop"
-  if [[ -e "$STATE_DIR/backups/nosnap.pref" ]]; then
-    run sudo cp -a "$STATE_DIR/backups/nosnap.pref" /etc/apt/preferences.d/nosnap.pref
-  elif [[ -e "$STATE_DIR/backups/nosnap.pref.missing" ]]; then
-    run sudo rm -f /etc/apt/preferences.d/nosnap.pref
+  if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+    if [[ -e "$STATE_DIR/backups/nosnap.pref" ]]; then
+      run sudo cp -a "$STATE_DIR/backups/nosnap.pref" /etc/apt/preferences.d/nosnap.pref
+    elif [[ -e "$STATE_DIR/backups/nosnap.pref.missing" ]]; then
+      run sudo rm -f /etc/apt/preferences.d/nosnap.pref
+    fi
   fi
 
   if [[ -f "$STATE_DIR/ptyxis-schema" && -f "$STATE_DIR/ptyxis-opacity" ]]; then
@@ -514,18 +632,29 @@ uninstall_all() {
   fi
   if [[ -f "$STATE_DIR/removed-packages" ]]; then
     while IFS= read -r package; do
-      run sudo apt-get install -y "$package"
+      if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+        run sudo apt-get install -y "$package"
+      else
+        run sudo dnf install -y "$package"
+      fi
     done < "$STATE_DIR/removed-packages"
   fi
   if [[ -f "$STATE_DIR/packages" ]]; then
     mapfile -t packages < "$STATE_DIR/packages"
-    ((${#packages[@]})) && run sudo apt-get purge -y "${packages[@]}"
+    if ((${#packages[@]})); then
+      if [[ "$DISTRO_FAMILY" == ubuntu ]]; then
+        run sudo apt-get purge -y "${packages[@]}"
+      else
+        run sudo dnf remove -y "${packages[@]}"
+      fi
+    fi
   fi
   [[ "$DRY_RUN" == true ]] || rm -rf "$STATE_DIR"
   ok "Managed changes were rolled back."
 }
 
 main() {
+  detect_distro_family
   [[ "$INTERACTIVE" == true && "$UNINSTALL" == false ]] && wizard
   exec > >(tee -a "$LOG_FILE") 2>&1
   trap 'die "Error on line $LINENO. See $LOG_FILE"' ERR
